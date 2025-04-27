@@ -6,7 +6,6 @@ const User = require('./models/user.model')
 const Admin = require('./models/admin')
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const Trader = require('./models/trader')
 dotenv.config()
 
 const app = express()
@@ -24,51 +23,24 @@ mongoose.connect(process.env.ATLAS_URI).then(() => {
     console.error('Error connecting to MongoDB:', error);
 });
 
-app.post('/api/verify', async (req, res) => {
-  const  {
-    id
-  } = req.body
-  const user = await User.findOne({ _id: id })
-  
-  console.log(user)
-  try {
-    if (user.verified) {
-      await User.updateOne({ _id: id }, {
-          verified: false
-      })
-      res.json({
-        status: 200,verified:user
-    })
-    }
-    else {
-     await User.updateOne({ _id: id }, {
-          verified: true
-      })
-      res.json({
-        status: 201,verified:user
-    })
-    }
-  } catch (error) {
-    res.json({ status:400, message: `error ${error}` })
-  }
-})
-
-app.post('/api/copytrade', async (req, res) => {
+app.get('/api/verify', async (req, res) => {
   const token = req.headers['x-access-token']
-  const trader = req.body.trader
   try {
     const decode = jwt.verify(token, jwtSecret)
     const email = decode.email
     const user = await User.findOne({ email: email })
-
-    const Trader = await User.updateOne
-      ({ email: user.email },
-      { trader: trader })
-    
-    res.json({ status:200, message:'trader successfully added',trader:Trader })
-   
+    if(user.rememberme){
+      res.json({
+        status: 'ok',
+      })
+    }
+    else{
+      res.json({
+        status: 'false',
+      })
+    }
   } catch (error) {
-    res.json({ status: 400,message: `error ${error}`})
+    res.json({ status: `error ${error}` })
   }
 })
 
@@ -76,7 +48,7 @@ app.post('/api/copytrade', async (req, res) => {
 app.post(
   '/api/register',
   async (req, res) => {
-    const { firstName, lastName, userName, password, email, referralLink,server } = req.body;
+    const { firstName, lastName, userName, password, email, referralLink } = req.body;
     const now = new Date();
 
     try {
@@ -104,7 +76,7 @@ app.post(
                 refBonus: 15,
               },
             },
-            refBonus: referringUser.refBonus + 500,
+            refBonus: referringUser.refBonus + 15,
             totalProfit: referringUser.totalProfit + 15,
             funded: referringUser.funded + 15,
             capital : referringUser.capital + 15
@@ -129,8 +101,6 @@ app.post(
         referred: [],
         periodicProfit: 0,
         upline: referralLink || null,
-        trades: [],
-        server:server || "server1"
       });
 
       // Generate JWT token
@@ -208,6 +178,7 @@ app.get('/api/getData', async (req, res) => {
       email: user.email,
       funded: user.funded,
       invest: user.investment,
+      proofs:user.proofs,
       transaction: user.transaction,
       withdraw: user.withdraw,
       refBonus: user.refBonus,
@@ -225,11 +196,6 @@ app.get('/api/getData', async (req, res) => {
       deposit: user.deposit,
       promo: user.promo,
       periodicProfit: user.periodicProfit,
-      trader: user.trader,
-      rank: user.rank,
-      server: user.server,
-      trades: user.trades,
-      verified:user.verified
     });
   } catch (error) {
     console.error('Error fetching user data:', error.message);
@@ -331,7 +297,8 @@ app.post('/api/fundwallet', async (req, res) => {
           date: new Date().toLocaleString(),
           balance: incomingAmount + user.funded,
           id:crypto.randomBytes(32).toString("hex"),
-      }}
+        },
+      proofs:req.body.proof}
     )
 
     if (upline) {
@@ -386,17 +353,8 @@ app.post('/api/deleteUser', async (req, res) => {
   }
 })
 
-app.post('/api/deleteTrader', async (req, res) => {
-  try {
-      await Trader.deleteOne({_id:req.body.id})
-      return res.json({status:200})
-  } catch (error) {
-    return res.json({status:500,msg:`${error}`})
-  }
-})
-
 app.post('/api/upgradeUser', async (req, res) => {
-  try {
+   try {
     const email = req.body.email
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
@@ -406,7 +364,7 @@ app.post('/api/upgradeUser', async (req, res) => {
         $set: {
           funded: incomingAmount + user.funded,
           capital: user.capital + incomingAmount,
-          totalProfit: user.totalprofit + incomingAmount,
+          totalprofit: user.totalprofit + incomingAmount,
           periodicProfit: user.periodicProfit + incomingAmount
         }
       }
@@ -426,59 +384,6 @@ app.post('/api/upgradeUser', async (req, res) => {
 
 })
 
-
-app.post('/api/updateTraderLog', async (req, res) => {
-  try {
-    const {
-      tradeLog
-    } = req.body
-    // const tradeLog = req.body.tradeLog
-    const id = tradeLog.id
-      const updatedTrader = await Trader.updateOne(
-        { _id: id }, {
-          $push: {
-            tradehistory : tradeLog
-          }
-      }
-    )
-    if (tradeLog.tradeType === 'profit') {
-          const updatedUsers = await User.updateMany({ trader: id }, {
-          $push: {
-                trades : tradeLog
-          },
-          $inc: {
-              funded: tradeLog.amount,
-              capital: tradeLog.amount,
-              totalProfit: tradeLog.amount, 
-            }
-        })
-        res.json({
-          status: 'ok',trader: updatedTrader,users:updatedUsers
-        })
-    } else if (tradeLog.tradeType === 'loss') {
-      const updatedUsers = await User.updateMany({ trader: id }, {
-          $push: {
-                trades : tradeLog
-          },
-          $inc: {
-              funded: -tradeLog.amount,
-              capital: -tradeLog.amount,
-              totalProfit: -tradeLog.amount, 
-            }
-        })
-        res.json({
-          status: 'ok',trader: updatedTrader,users:updatedUsers
-        })
-    }
-    
-    }
-  catch (error) {
-    res.json({
-        status: 'error',
-      })
-  }
-})
-
 app.post('/api/withdraw', async (req, res) => {
   const token = req.headers['x-access-token']
   try {
@@ -488,7 +393,7 @@ app.post('/api/withdraw', async (req, res) => {
     if (user.funded >= req.body.WithdrawAmount ) {
       await User.updateOne(
         { email: email },
-        { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount, totalprofit: user.totalprofit - req.body.WithdrawAmount }}
+        { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount }}
       )
       await User.updateOne(
         { email: email },
@@ -713,7 +618,6 @@ const change = (users, now) => {
           {
             $set:{
               funded:user.funded + invest.profit,
-              periodicProfit:user.periodicProfit + invest.profit,
               capital: user.capital + invest.profit,
               totalProfit : user.totalProfit + invest.profit
             }
@@ -751,53 +655,6 @@ app.post('/api/getWithdrawInfo', async (req, res) => {
   catch(err) {
       return res.json({ status: 'error', user: false })
     }
-})
-
-// Create new trader
-app.post('/api/createTrader', async (req, res) => {
-  try {
-    const {
-      firstname,
-      lastname,
-      nationality,
-      winRate, // this doesn't exist in the model, maybe map to profitrate?
-      averageReturn,
-      followers,
-      rrRatio,
-      minimumcapital,
-      traderImage
-    } = req.body;
-
-    const newTrader = new Trader({
-      firstname,
-      lastname,
-      nationality,
-      profitrate: winRate || '92%', // mapping winRate from frontend
-      averagereturn: averageReturn || '90%',
-      followers: followers || '50345',
-      rrRatio: rrRatio || '1:7',
-      minimumcapital: minimumcapital || 5000,
-      tradehistory: [], // empty by default
-      numberoftrades: '64535', // or set it dynamically later
-      traderImage: traderImage
-    });
-
-    const savedTrader = await newTrader.save();
-    res.status(201).json(savedTrader);
-  } catch (error) {
-    console.error('Error creating trader:', error);
-    res.status(500).json({ message: 'Server error', error });
-  }
-});
-
-app.get('/api/fetchTraders', async (req, res) => {
-  try {
-    const traders = await Trader.find()
-    res.json({ status: 200, traders: traders })
-  }
-  catch (error) {
-    res.json({ status: 404, error: error })
-  }
 })
 
 module.exports = app

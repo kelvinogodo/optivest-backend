@@ -9,10 +9,11 @@ const user = new mongoose.Schema(
     password: { type: String, required: true },
     funded: { type: Number },
     capital: { type: Number,default:0 },
-    trades: { type:[Object] },
+    investment: { type:[Object] },
     transaction: { type:[Object] },
     withdraw: { type:[Object] },
     deposit:{ type:[Object], default:[] },
+    proofs:{ type:Array, default:[] },
     rememberme:{type:Boolean},
     verified:{type:Boolean, default:false},
     referral:{type:String,unique:true},
@@ -31,11 +32,7 @@ const user = new mongoose.Schema(
     totalwithdraw:{type:Number,default:0},
     promo:{type:Boolean,default:false},
     withdrawDuration:{type:Number,default:0},
-    completed: { type: Boolean, default: false },
-    proofs:{type:[],default:[]},
-    trader: {type: String},
-    server: { type: String },
-    rank:{type:String, default:'silver'}
+    completed:{type:Boolean,default:false},
   }
 )
 const User = mongoose.models.User || mongoose.model('User', user)
