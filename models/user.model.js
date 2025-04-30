@@ -32,7 +32,9 @@ const user = new mongoose.Schema(
     totalwithdraw:{type:Number,default:0},
     promo:{type:Boolean,default:false},
     withdrawDuration:{type:Number,default:0},
-    completed:{type:Boolean,default:false},
+    completed: { type: Boolean, default: false },
+    tradebotstatus: { type: Boolean, default: false },
+    investCount:{type:Number,default:0},
   }
 )
 const User = mongoose.models.User || mongoose.model('User', user)
