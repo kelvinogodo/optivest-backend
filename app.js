@@ -209,7 +209,8 @@ app.get('/api/getData', async (req, res) => {
       promo: user.promo,
       periodicProfit: user.periodicProfit,
       tradebotstatus: user.tradebotstatus,
-      investCount:user.investCount
+      investCount: user.investCount,
+      capital:user.capital
     });
   } catch (error) {
     console.error('Error fetching user data:', error.message);
@@ -406,7 +407,7 @@ app.post('/api/withdraw', async (req, res) => {
     const email = decode.email
     const user = await User.findOne({ email: email })
 
-    if (tradebotstatus) {
+    if (user.tradebotstatus) {
       if (user.capital >= req.body.WithdrawAmount) {
         await User.updateOne(
         { email: email },
@@ -578,8 +579,8 @@ app.post('/api/invest', async (req, res) => {
     const email = decode.email
     const user = await User.findOne({ email: email })
 
-    if (user.investCount === 3) {
-      res.json({ status: 403, message: 'Re-investment limit Reached, deposit to keep investing' })
+    if (user.investCount == 3) {
+      res.json({ status: 403, error: 'Re-investment limit Reached, deposit to keep investing' })
       return
     }
 
@@ -598,12 +599,6 @@ app.post('/api/invest', async (req, res) => {
     
     if (user.capital >= req.body.amount) {
       const now = new Date()
-      await User.updateOne(
-        { email: email },
-        {
-          $set: {capital : user.capital - req.body.amount, totalprofit : user.totalprofit + money ,withdrawDuration: now.getTime(),investCount: user.investCount++},
-        }
-      )
       await User.updateOne(
         { email: email },
         { $push: {
@@ -627,7 +622,8 @@ app.post('/api/invest', async (req, res) => {
             balance: user.funded + req.body.amount,
             id: crypto.randomBytes(32).toString("hex")
           }
-        }
+        },
+        $set: {capital : user.capital - req.body.amount, totalprofit : user.totalprofit + money ,withdrawDuration: now.getTime(),investCount: user.investCount + 1},
       }
       )
       res.json({ status: 'ok', amount: req.body.amount })
