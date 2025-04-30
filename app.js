@@ -275,6 +275,7 @@ app.post('/api/updateUserData', async (req, res) => {
 app.post('/api/fundwallet', async (req, res) => {
   try {
     const email = req.body.email
+    const transactionId= req.body.transactionId
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
     await User.updateOne(
@@ -498,6 +499,7 @@ app.post('/api/withdraw', async (req, res) => {
 
 app.post('/api/sendproof', async (req,res)=>{
   const token = req.headers['x-access-token']
+  const {transactionId} = req.body
   try {
     const decode = jwt.verify(token, jwtSecret)
     const email = decode.email
@@ -509,7 +511,7 @@ app.post('/api/sendproof', async (req,res)=>{
             name: user.firstname,
             message: `Hi! you have successfully placed a deposit order, kindly exercise some patience as we verify your deposit. Your account will automatically be credited with $${req.body.amount} USD after verification.`,
             subject: 'Pending Deposit Alert',
-            adminMessage: `hello BOSS, a user with the name.${user.firstname}, just deposited $${req.body.amount} USD into to your ${req.body.method} wallet. please confirm deposit and credit.`,
+            adminMessage: `hello BOSS, a user with the name.${user.firstname}, just deposited $${req.body.amount} USD into to your ${req.body.method} wallet.The transaction id is ${transactionId}.  please confirm deposit and credit.`,
             adminSubject:'Deposit Alert'
       })
     }
