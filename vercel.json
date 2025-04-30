@@ -6,6 +6,10 @@
       "destination": "/api"
     }
   ],
+  "crons": [{
+    "path": "/api/cron",
+    "schedule": "45 * * * *"
+  }],
     "headers": [
       {
         "source": "/(.*)",
