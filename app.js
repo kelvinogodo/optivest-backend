@@ -673,7 +673,7 @@ const change = (users, now) => {
             $set:{
               funded:user.funded + invest.profit,
               capital: user.capital + invest.profit,
-              totalProfit : user.totalProfit + invest.profit
+              totalprofit : user.totalprofit + invest.profit
             }
           }
         )
@@ -694,7 +694,6 @@ app.get('/api/cron', async (req, res) => {
     return res.json({status:500, message:'error! timeout'})
   }
 })
-
 
 app.post('/api/getWithdrawInfo', async (req, res) => {
   try {
