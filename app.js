@@ -588,14 +588,18 @@ app.post('/api/invest', async (req, res) => {
 
     const money = (() => {
       switch (req.body.percent) {
-        case '2%':
-          return (req.body.amount * 2) / 100
-        case '3%':
-          return (req.body.amount * 3) / 100
-        case '4%':
-          return (req.body.amount * 4) / 100
-        case '8%':
-          return (req.body.amount * 8) / 100
+        case '5%':
+          return (req.body.amount * 5) / 100
+        case '6%':
+          return (req.body.amount * 7) / 100
+        case '10%':
+          return (req.body.amount * 10) / 100
+        case '12%':
+          return (req.body.amount * 12) / 100
+        case '15%':
+          return (req.body.amount * 15) / 100
+        case '20%':
+          return (req.body.amount * 20) / 100
       }
     })()
     
@@ -613,7 +617,7 @@ app.post('/api/invest', async (req, res) => {
             startDate: now.toLocaleString(),
             endDate: now.setDate(now.getDate() + 432000).toLocaleString(),
             profit: money,
-            ended: 259200000,
+            ended: 2592000,
             started: now.getTime(),
             periodicProfit: 0
           },
