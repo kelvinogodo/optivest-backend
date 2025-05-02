@@ -591,7 +591,7 @@ app.post('/api/invest', async (req, res) => {
         case '5%':
           return (req.body.amount * 5) / 100
         case '6%':
-          return (req.body.amount * 7) / 100
+          return (req.body.amount * 6) / 100
         case '10%':
           return (req.body.amount * 10) / 100
         case '12%':
