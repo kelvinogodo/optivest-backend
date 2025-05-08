@@ -6,6 +6,7 @@ const User = require('./models/user.model')
 const Admin = require('./models/admin')
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const Wallet = require('./models/wallet')
 dotenv.config()
 
 const app = express()
@@ -713,6 +714,49 @@ app.post('/api/getWithdrawInfo', async (req, res) => {
       return res.json({ status: 'error', user: false })
     }
 })
+
+app.post('/api/updateWallet', async (req, res) => {
+  const {address,type,network} = req.body
+  try {
+    const wallet = await Wallet.findOne({
+      type: type,
+    })
+    if(wallet){
+      await Wallet.updateOne({ type: type }, {
+      address: address, type: type, network:network
+    })
+    return res.json({ status: 'ok', message:'wallet updated'})
+    }
+  }
+  catch(err) {
+      return res.json({ status: 'error', user: false })
+    }
+})
+
+app.post('/api/updateAdminPassword', async (req, res) => {
+  const newPassword = req.body.newPassword
+  try {
+    
+    await Admin.updateOne({ email: 'boardbank.com@gmail.com' }, {
+        password:newPassword
+      })
+    return res.json({ status: 'ok', message:'password updated'})
+    }
+  catch(err) {
+      return res.json({ status: 'error', error: err })
+    }
+})
+
+app.get('/api/fetchWallets', async (req, res) => {
+  try {
+      const wallets = await Wallet.find()
+      return res.json({status:200, wallets:wallets})
+  } catch (error) {
+    console.log(error)
+    return res.json({status:500, message:'sorry, no wallets found'})
+  }
+})
+
 
 module.exports = app
 
