@@ -17,12 +17,32 @@ const jwtSecret = process.env.JWT_SECRET;
 app.use(cors())
 app.use(express.json())
 
-mongoose.connect(process.env.ATLAS_URI).then(() => {
-    console.log('Connected to MongoDB');
-})
-.catch((error) => {
-    console.error('Error connecting to MongoDB:', error);
-});
+const ATLAS_URI = process.env.ATLAS_URI;
+
+if (!ATLAS_URI) {
+  throw new Error("Please define the ATLAS_URI environment variable in Vercel");
+}
+
+/* Global cache so we don’t reconnect every time */
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+const connectDB = async () => {
+   if (cached.conn) return cached.conn;
+
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(ATLAS_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    }).then((mongoose) => mongoose);
+  }
+
+  cached.conn = await cached.promise;
+  return cached.conn;
+}
+connectDB()
 
 app.post('/api/verify', async (req, res) => {
   const  {
