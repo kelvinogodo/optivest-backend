@@ -762,6 +762,7 @@ app.post('/api/invest', async (req, res) => {
 // Updates user balances with profit if the week has passed
 const processInvestments = async (users, now) => {
   const updates = [];
+  console.log(`[CRON] Starting investment check for ${users.length} users at ${new Date(now).toISOString()}...`);
 
   for (const user of users) {
     if (!user.investment || user.investment.length === 0) continue;
@@ -769,43 +770,40 @@ const processInvestments = async (users, now) => {
     let userChanged = false;
     let newFunded = user.funded || 0;
     let newTotalProfit = user.totalprofit || 0;
-    let newCapital = user.capital || 0; // Existing logic seemed to add profit to capital too?
+    let newCapital = user.capital || 0;
 
-    // Map through investments to check updates
-    // We use a regular for-loop to support async/await if needed, or just standard mapping
     const updatedInvestments = user.investment.map(invest => {
-      // Skip invalid records
+      // 1. Skip if missing critical data or already inactive
       if (!invest.started || !invest.nextPayout) return invest;
-      if (!invest.active && invest.active !== undefined) return invest; // If we track active status
+      if (invest.active === false) return invest;
 
-      // Check if investment has ended
-      // Using endDateMs if we stored it, or calculating from duration
-      const endTime = invest.endDateMs || (invest.started + (invest.ended || 0)); // Fallback to old logic if needed
-
-      if (now >= endTime) {
-        // Investment expired
-        invest.active = false;
-        return invest;
-      }
-
-      // Check if it's time for a payout
+      // 2. CHECK PAYOUT FIRST
       if (now >= invest.nextPayout) {
-        const profitAmount = invest.periodicProfit || invest.profit; // Support both naming conventions
+        const profitAmount = invest.periodicProfit || invest.profit;
 
         if (profitAmount && !isNaN(profitAmount)) {
-          // PAYOUT!
+          console.log(`[PAYOUT] Paying ${profitAmount} to ${user.email} for plan ${invest.plan}`);
+
           newFunded += profitAmount;
           newTotalProfit += profitAmount;
-          newCapital += profitAmount; // Based on your old logic: capital: user.capital + invest.profit
+          newCapital += profitAmount;
 
           invest.totalEarned = (invest.totalEarned || 0) + profitAmount;
 
           // Schedule next payout (add 7 days)
           invest.nextPayout += (7 * 24 * 60 * 60 * 1000);
 
-          // If we missed multiple weeks (server down), this loop only pays once. 
-          // To pay multiple weeks at once, you'd use a while loop here, but safer to do one at a time.
+          userChanged = true;
+        }
+      }
 
+      // 3. CHECK EXPIRATION SECOND
+      const endTime = invest.endDateMs || (invest.started + (invest.ended || 0));
+
+      if (now >= endTime) {
+        if (invest.active !== false) {
+          console.log(`[EXPIRED] Investment ${invest.plan} for ${user.email} has ended.`);
+          invest.active = false;
           userChanged = true;
         }
       }
@@ -833,6 +831,17 @@ const processInvestments = async (users, now) => {
   await Promise.all(updates);
   return updates.length;
 };
+
+// AUTO-RUNNER for Local Development
+setInterval(async () => {
+  try {
+    const users = await User.find();
+    const now = Date.now();
+    await processInvestments(users, now);
+  } catch (err) {
+    console.error("[CRON AUTO] Error:", err.message);
+  }
+}, 60000);
 
 app.get('/api/cron', async (req, res) => {
   try {
