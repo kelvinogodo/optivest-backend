@@ -7,6 +7,8 @@ const Admin = require('./models/admin')
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const Wallet = require('./models/wallet')
+const nodemailer = require('nodemailer');
+const BotPurchase = require('./models/botPurchase.model');
 dotenv.config()
 
 const app = express()
@@ -30,7 +32,7 @@ if (!cached) {
 }
 
 const connectDB = async () => {
-   if (cached.conn) return cached.conn;
+  if (cached.conn) return cached.conn;
 
   if (!cached.promise) {
     cached.promise = mongoose.connect(ATLAS_URI, {
@@ -45,31 +47,31 @@ const connectDB = async () => {
 connectDB()
 
 app.post('/api/verify', async (req, res) => {
-  const  {
+  const {
     id
   } = req.body
   const user = await User.findOne({ _id: id })
-  
+
   console.log(user)
   try {
     if (user.tradebotstatus) {
       await User.updateOne({ _id: id }, {
-          tradebotstatus: false
+        tradebotstatus: false
       })
       res.json({
-        status: 200,tradebotstatus:user
-    })
+        status: 200, tradebotstatus: user
+      })
     }
     else {
-     await User.updateOne({ _id: id }, {
-          tradebotstatus: true
+      await User.updateOne({ _id: id }, {
+        tradebotstatus: true
       })
       res.json({
-        status: 201,tradebotstatus:user
-    })
+        status: 201, tradebotstatus: user
+      })
     }
   } catch (error) {
-    res.json({ status:400, message: `error ${error}` })
+    res.json({ status: 400, message: `error ${error}` })
   }
 })
 
@@ -83,7 +85,7 @@ app.post(
 
     try {
       // Check if the user already exists
-      const existingUser = await User.findOne({ email:email });
+      const existingUser = await User.findOne({ email: email });
       if (existingUser) {
         return res.status(409).json({ status: 'error', message: 'Email or username already exists' });
       }
@@ -109,7 +111,7 @@ app.post(
             refBonus: referringUser.refBonus + 15,
             totalProfit: referringUser.totalProfit + 15,
             funded: referringUser.funded + 15,
-            capital : referringUser.capital + 15
+            capital: referringUser.capital + 15
           }
         );
       }
@@ -120,7 +122,7 @@ app.post(
         lastname: lastName,
         username: userName,
         phonenumber: phone,
-        country:country,
+        country: country,
         email,
         password: password,
         funded: 0,
@@ -132,7 +134,7 @@ app.post(
         refBonus: 0,
         referred: [],
         periodicProfit: 0,
-        investCount:0,
+        investCount: 0,
         upline: referralLink || null,
       });
 
@@ -170,16 +172,16 @@ app.post(
   }
 );
 
-app.get('/:id/refer', async(req,res)=>{
+app.get('/:id/refer', async (req, res) => {
   try {
-    const user = await User.findOne({username:req.params.id})
-    if(!user){
-      return res.json({status:400})
+    const user = await User.findOne({ username: req.params.id })
+    if (!user) {
+      return res.json({ status: 400 })
     }
-    res.json({status:200,referredUser:req.params.id})
+    res.json({ status: 200, referredUser: req.params.id })
   } catch (error) {
     console.log(error)
-    res.json({status:`internal server error ${error}`})
+    res.json({ status: `internal server error ${error}` })
   }
 })
 
@@ -211,7 +213,7 @@ app.get('/api/getData', async (req, res) => {
       email: user.email,
       funded: user.funded,
       invest: user.investment,
-      proofs:user.proofs,
+      proofs: user.proofs,
       transaction: user.transaction,
       withdraw: user.withdraw,
       refBonus: user.refBonus,
@@ -231,7 +233,7 @@ app.get('/api/getData', async (req, res) => {
       periodicProfit: user.periodicProfit,
       tradebotstatus: user.tradebotstatus,
       investCount: user.investCount,
-      capital:user.capital
+      capital: user.capital
     });
   } catch (error) {
     console.error('Error fetching user data:', error.message);
@@ -296,17 +298,18 @@ app.post('/api/updateUserData', async (req, res) => {
 app.post('/api/fundwallet', async (req, res) => {
   try {
     const email = req.body.email
-    const transactionId= req.body.transactionId
+    const transactionId = req.body.transactionId
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
     await User.updateOne(
-      { email: email },{
-      $set : {
+      { email: email }, {
+      $set: {
         funded: incomingAmount + user.funded,
-        capital :user.capital + incomingAmount,
+        capital: user.capital + incomingAmount,
         totaldeposit: user.totaldeposit + incomingAmount,
-        investCount:0
-      }}
+        investCount: 0
+      }
+    }
     )
     const upline = await User.findOne({ username: user.upline })
     if (upline) {
@@ -323,24 +326,26 @@ app.post('/api/fundwallet', async (req, res) => {
     await User.updateOne(
       { email: email },
       {
-        $push : {
-          deposit:{
-            date:new Date().toLocaleString(),
-            amount:incomingAmount,
-            id:crypto.randomBytes(32).toString("hex"),
-            balance: incomingAmount + user.funded}
-        },transaction: {
-          type:'Deposit',
+        $push: {
+          deposit: {
+            date: new Date().toLocaleString(),
+            amount: incomingAmount,
+            id: crypto.randomBytes(32).toString("hex"),
+            balance: incomingAmount + user.funded
+          }
+        }, transaction: {
+          type: 'Deposit',
           amount: incomingAmount,
           date: new Date().toLocaleString(),
           balance: incomingAmount + user.funded,
-          id:crypto.randomBytes(32).toString("hex"),
+          id: crypto.randomBytes(32).toString("hex"),
         },
-      proofs:req.body.proof}
+        proofs: req.body.proof
+      }
     )
 
     if (upline) {
-        res.json({
+      res.json({
         status: 'ok',
         funded: req.body.amount,
         name: user.firstname,
@@ -350,21 +355,21 @@ app.post('/api/fundwallet', async (req, res) => {
         uplineName: upline.firstname,
         uplineEmail: upline.email,
         uplineSubject: `Earned Referral Commission`,
-        uplineMessage:`Congratulations! You just earned $${10/100 * incomingAmount} in commission from ${user.firstname} ${user.lastname}'s deposit of $${incomingAmount}.`
-    })
+        uplineMessage: `Congratulations! You just earned $${10 / 100 * incomingAmount} in commission from ${user.firstname} ${user.lastname}'s deposit of $${incomingAmount}.`
+      })
     }
     else {
       res.json({
-      status: 'ok',
-      funded: req.body.amount,
-      name: user.firstname,
-      email: user.email,
-      message: `your account has been credited with $${incomingAmount} USD. you can proceed to choosing your preferred investment plan to start earning. Thanks.`,
-      subject: 'Deposit Successful',
-      upline:null
-    })
+        status: 'ok',
+        funded: req.body.amount,
+        name: user.firstname,
+        email: user.email,
+        message: `your account has been credited with $${incomingAmount} USD. you can proceed to choosing your preferred investment plan to start earning. Thanks.`,
+        subject: 'Deposit Successful',
+        upline: null
+      })
     }
-    
+
   } catch (error) {
     console.log(error)
     res.json({ status: 'error' })
@@ -372,27 +377,27 @@ app.post('/api/fundwallet', async (req, res) => {
 })
 
 app.post('/api/admin', async (req, res) => {
-  const admin = await Admin.findOne({email:req.body.email})
-  if(admin){
-      return res.json({status:200})
+  const admin = await Admin.findOne({ email: req.body.email })
+  if (admin) {
+    return res.json({ status: 200 })
   }
-  else{
-    return res.json({status:400})
+  else {
+    return res.json({ status: 400 })
   }
 })
 
 
 app.post('/api/deleteUser', async (req, res) => {
   try {
-      await User.deleteOne({email:req.body.email})
-      return res.json({status:200})
+    await User.deleteOne({ email: req.body.email })
+    return res.json({ status: 200 })
   } catch (error) {
-    return res.json({status:500,msg:`${error}`})
+    return res.json({ status: 500, msg: `${error}` })
   }
 })
 
 app.post('/api/upgradeUser', async (req, res) => {
-   try {
+  try {
     const email = req.body.email
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
@@ -415,10 +420,10 @@ app.post('/api/upgradeUser', async (req, res) => {
   }
   catch (error) {
     res.json({
-        status: 'error',
-      })
+      status: 'error',
+    })
   }
-    
+
 
 })
 
@@ -432,117 +437,134 @@ app.post('/api/withdraw', async (req, res) => {
     if (user.tradebotstatus) {
       if (user.capital >= req.body.WithdrawAmount) {
         await User.updateOne(
-        { email: email },
-        { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount }}
-      )
-      await User.updateOne(
-        { email: email },
-        { $push: { withdraw: {
-          date:new Date().toLocaleString(),
-          amount:req.body.WithdrawAmount,
-          id:crypto.randomBytes(32).toString("hex"),
-          balance: user.funded - req.body.WithdrawAmount
-        } } }
-      )
-      const now = new Date()
-      await User.updateOne(
-        { email: email },
-        { $push: { transaction: {
-          type:'withdraw',
-          amount: req.body.WithdrawAmount,
-          date: now.toLocaleString(),
-          balance: user.funded - req.body.WithdrawAmount,
-          id:crypto.randomBytes(32).toString("hex"),
-        } } }
-      )
-      return res.json({
-            status: 'ok',
-            withdraw: req.body.WithdrawAmount,
-            email: user.email,
-            name: user.firstname,
-            message: `We have received your withdrawal order, kindly exercise some patience as our management board approves your withdrawal`,
-            subject: 'Withdrawal Order Alert',
-            adminMessage: `Hello BOSS! a user with the name ${user.firstname} placed withdrawal of $${req.body.WithdrawAmount} USD, to be withdrawn into ${req.body.wallet} ${req.body.method} wallet`,
-      })
+          { email: email },
+          { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount } }
+        )
+        await User.updateOne(
+          { email: email },
+          {
+            $push: {
+              withdraw: {
+                date: new Date().toLocaleString(),
+                amount: req.body.WithdrawAmount,
+                id: crypto.randomBytes(32).toString("hex"),
+                balance: user.funded - req.body.WithdrawAmount
+              }
+            }
+          }
+        )
+        const now = new Date()
+        await User.updateOne(
+          { email: email },
+          {
+            $push: {
+              transaction: {
+                type: 'withdraw',
+                amount: req.body.WithdrawAmount,
+                date: now.toLocaleString(),
+                balance: user.funded - req.body.WithdrawAmount,
+                id: crypto.randomBytes(32).toString("hex"),
+              }
+            }
+          }
+        )
+        return res.json({
+          status: 'ok',
+          withdraw: req.body.WithdrawAmount,
+          email: user.email,
+          name: user.firstname,
+          message: `We have received your withdrawal order, kindly exercise some patience as our management board approves your withdrawal`,
+          subject: 'Withdrawal Order Alert',
+          adminMessage: `Hello BOSS! a user with the name ${user.firstname} placed withdrawal of $${req.body.WithdrawAmount} USD, to be withdrawn into ${req.body.wallet} ${req.body.method} wallet`,
+        })
       }
-      
+
     }
-    else if (user.totalprofit >= req.body.WithdrawAmount ) {
+    else if (user.totalprofit >= req.body.WithdrawAmount) {
       await User.updateOne(
         { email: email },
-        { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount }}
+        { $set: { funded: user.funded - req.body.WithdrawAmount, totalwithdraw: user.totalwithdraw + req.body.WithdrawAmount, capital: user.capital - req.body.WithdrawAmount } }
       )
       await User.updateOne(
         { email: email },
-        { $push: { withdraw: {
-          date:new Date().toLocaleString(),
-          amount:req.body.WithdrawAmount,
-          id:crypto.randomBytes(32).toString("hex"),
-          balance: user.funded - req.body.WithdrawAmount
-        } } }
+        {
+          $push: {
+            withdraw: {
+              date: new Date().toLocaleString(),
+              amount: req.body.WithdrawAmount,
+              id: crypto.randomBytes(32).toString("hex"),
+              balance: user.funded - req.body.WithdrawAmount
+            }
+          }
+        }
       )
       const now = new Date()
       await User.updateOne(
         { email: email },
-        { $push: { transaction: {
-          type:'withdraw',
-          amount: req.body.WithdrawAmount,
-          date: now.toLocaleString(),
-          balance: user.funded - req.body.WithdrawAmount,
-          id:crypto.randomBytes(32).toString("hex"),
-        } } }
+        {
+          $push: {
+            transaction: {
+              type: 'withdraw',
+              amount: req.body.WithdrawAmount,
+              date: now.toLocaleString(),
+              balance: user.funded - req.body.WithdrawAmount,
+              id: crypto.randomBytes(32).toString("hex"),
+            }
+          }
+        }
       )
       return res.json({
-            status: 'ok',
-            withdraw: req.body.WithdrawAmount,
-            email: user.email,
-            name: user.firstname,
-            message: `We have received your withdrawal order, kindly exercise some patience as our management board approves your withdrawal`,
-            subject: 'Withdrawal Order Alert',
-            adminMessage: `Hello BOSS! a user with the name ${user.firstname} placed withdrawal of $${req.body.WithdrawAmount} USD, to be withdrawn into ${req.body.wallet} ${req.body.method} wallet`,
+        status: 'ok',
+        withdraw: req.body.WithdrawAmount,
+        email: user.email,
+        name: user.firstname,
+        message: `We have received your withdrawal order, kindly exercise some patience as our management board approves your withdrawal`,
+        subject: 'Withdrawal Order Alert',
+        adminMessage: `Hello BOSS! a user with the name ${user.firstname} placed withdrawal of $${req.body.WithdrawAmount} USD, to be withdrawn into ${req.body.wallet} ${req.body.method} wallet`,
       })
     }
-   
-  else{
+
+    else {
       res.json({
-      status: 400,
-      subject:'Failed Withdrawal Alert',
-      email: user.email,
-      name: user.firstname,
-      withdrawMessage:`We have received your withdrawal order, but you can only withdraw your profit. To withdraw capital and profit, you will have to purchase a third-party trading bot in the trading bot page, Thanks.`
+        status: 400,
+        subject: 'Failed Withdrawal Alert',
+        email: user.email,
+        name: user.firstname,
+        withdrawMessage: `We have received your withdrawal order, but you can only withdraw your profit. To withdraw capital and profit, you will have to purchase a third-party trading bot in the trading bot page, Thanks.`
       })
-  }}
-   catch (error) {
+    }
+  }
+  catch (error) {
     console.log(error)
-    res.json({ status: 'error',message:'internal server error' })
+    res.json({ status: 'error', message: 'internal server error' })
   }
 })
 
-app.post('/api/sendproof', async (req,res)=>{
+app.post('/api/sendproof', async (req, res) => {
   const token = req.headers['x-access-token']
-  const {transactionId} = req.body
+  const { transactionId } = req.body
   try {
     const decode = jwt.verify(token, jwtSecret)
     const email = decode.email
     const user = await User.findOne({ email: email })
-    if(user){
-            return res.json({
-            status: 200,
-            email: user.email,
-            name: user.firstname,
-            message: `Hi! you have successfully placed a deposit order, kindly exercise some patience as we verify your deposit. Your account will automatically be credited with $${req.body.amount} USD after verification.`,
-            subject: 'Pending Deposit Alert',
-            adminMessage: `hello BOSS, a user with the name.${user.firstname}, just deposited $${req.body.amount} USD into to your ${req.body.method} wallet.The transaction id is ${transactionId}.  please confirm deposit and credit.`,
-            adminSubject:'Deposit Alert'
+    if (user) {
+      return res.json({
+        status: 200,
+        email: user.email,
+        name: user.firstname,
+        message: `Hi! you have successfully placed a deposit order, kindly exercise some patience as we verify your deposit. Your account will automatically be credited with $${req.body.amount} USD after verification.`,
+        subject: 'Pending Deposit Alert',
+        adminMessage: `hello BOSS, a user with the name.${user.firstname}, just deposited $${req.body.amount} USD into to your ${req.body.method} wallet.The transaction id is ${transactionId}.  please confirm deposit and credit.`,
+        adminSubject: 'Deposit Alert'
       })
     }
-    else{
-      return res.json({status:500})
+    else {
+      return res.json({ status: 500 })
     }
   } catch (error) {
     console.log(error)
     res.json({ status: 404 })
-    }
+  }
 })
 
 
@@ -563,6 +585,14 @@ app.post('/api/login', async (req, res) => {
     // const isPasswordValid = await bcrypt.compare(password, user.password);
     if (password != user.password) {
       return res.json({ status: 401, message: 'Incorrect password' });
+    }
+
+    if (user.isActive === false) {
+      return res.json({ status: 403, message: 'Your account is currently deactivated.' });
+    }
+
+    if (user.isActive === false) {
+      return res.json({ status: 403, message: 'Your account is currently deactivated.' });
     }
 
     // Generate JWT token with user ID and email
@@ -595,190 +625,503 @@ app.get('/api/getUsers', async (req, res) => {
 })
 
 
-app.post('/api/invest', async (req, res) => {
-  const token = req.headers['x-access-token']
-  try {
-    const decode = jwt.verify(token, jwtSecret)
-    const email = decode.email
-    const user = await User.findOne({ email: email })
+// ==========================================
+// 1. CONFIGURATION (Source of Truth)
+// ==========================================
+// Define plans here to avoid hardcoded values in logic and ensure security.
+const PLAN_CONFIG = {
+  'Tryo Plan': {
+    weeklyPercent: 7.5,
+    durationDays: 365
+  },
+  'Ruby Account': {
+    weeklyPercent: 20.0,
+    durationDays: 365
+  },
+  'Medial Plan': {
+    weeklyPercent: 25.90,
+    durationDays: 365
+  },
+  'Veltrix Plan': {
+    weeklyPercent: 39.90,
+    durationDays: 365
+  },
+  'VIP I': {
+    weeklyPercent: 41.30,
+    durationDays: 7
+  },
+  'VIP II': {
+    weeklyPercent: 45.96,
+    durationDays: 7
+  }
+};
 
-    if (user.investCount == 3) {
-      res.json({ status: 403, error: 'Re-investment limit Reached, deposit to keep investing' })
-      return
+// Helper: safe float math (optional but good practice for money)
+const calculateProfit = (amount, percent) => {
+  return (amount * percent) / 100;
+};
+
+
+// ==========================================
+// 2. INVESTMENT ROUTE
+// ==========================================
+app.post('/api/invest', async (req, res) => {
+  const token = req.headers['x-access-token'];
+
+  try {
+    const decode = jwt.verify(token, jwtSecret);
+    const email = decode.email;
+    const user = await User.findOne({ email: email });
+
+    if (!user) {
+      return res.json({ status: 404, message: 'User not found' });
     }
 
-    const money = (() => {
-      switch (req.body.percent) {
-        case '7.5%':
-          return (req.body.amount * 7.5) / 100
-        case '25.90%':
-          return (req.body.amount * 25.90) / 100
-        case '33.50%':
-          return (req.body.amount * 33.50) / 100
-        case '39.90%':
-          return (req.body.amount * 39.90) / 100
-        case '20.976%':
-          return (req.body.amount * 20.976) / 100
-        case '41.395%':
-          return (req.body.amount * 41.395) / 100
-        case '45.96%':
-          return (req.body.amount * 45.96) / 100
-      }
-    })()
-    
-    if (user.capital >= req.body.amount) {
-      const now = new Date()
-      await User.updateOne(
-        { email: email },
-        { $push: {
-          investment:
-          {
+    if (user.investCount >= 3) { // Changed == 3 to >= 3 for safety
+      return res.json({ status: 403, error: 'Re-investment limit reached. Deposit to keep investing.' });
+    }
+
+    const { amount, plan: planName } = req.body;
+
+    // VALIDATION: Check if plan exists in our config
+    const planConfig = PLAN_CONFIG[planName];
+    if (!planConfig) {
+      return res.json({ status: 400, message: 'Invalid investment plan selected.' });
+    }
+
+    // Capital Check
+    if (user.capital < amount) {
+      return res.json({ status: 400, message: 'Insufficient capital!' });
+    }
+
+    // CALCULATION ---------------------------
+    // Use server-side config for calculations, NOT client input
+    const periodicProfit = calculateProfit(amount, planConfig.weeklyPercent);
+
+    // Calculate total expected profit over the full duration? 
+    // If the plan pays weekly for X days:
+    // Number of payouts = Duration Days / 7
+    // Total Profit = periodicProfit * (Duration Days / 7)
+    // Note: If you want exactly 52 weeks or a specific number of payouts, logic might need adjustment.
+    // For now, we store the periodic (weekly) profit amount to be paid out by the Cron job.
+
+    const now = new Date();
+    const durationMs = planConfig.durationDays * 24 * 60 * 60 * 1000;
+    const endDate = new Date(now.getTime() + durationMs);
+
+    // DATABASE UPDATE -----------------------
+    await User.updateOne(
+      { email: email },
+      {
+        $push: {
+          investment: {
             type: 'investment',
-            amount: req.body.amount,
-            plan: req.body.plan,
-            percent: req.body.percent,
+            amount: amount,
+            plan: planName,
+            percent: `${planConfig.weeklyPercent}%`, // Store formatted string for display
             startDate: now.toLocaleString(),
-            endDate: now.setDate(now.getDate() + 432000).toLocaleString(),
-            profit: money,
-            ended: 2592000,
+            endDate: endDate.toLocaleString(),
+            endDateMs: endDate.getTime(), // Store raw MS for easier comparison in Cron
+            profit: periodicProfit, // This is the WEEKLY profit amount
+            periodicProfit: periodicProfit,
             started: now.getTime(),
-            periodicProfit: 0
+            nextPayout: now.getTime() + (7 * 24 * 60 * 60 * 1000), // First payout in 7 days
+            totalEarned: 0,
+            active: true
           },
           transaction: {
             type: 'investment',
-            amount: req.body.amount,
+            amount: amount,
             date: now.toLocaleString(),
-            balance: user.funded + req.body.amount,
+            balance: user.funded + amount, // Note: Logic check - is balance increasing or decreasing? Usually investing subtracts capital?
+            // Existing logic had: balance: user.funded + req.body.amount. Keeping consistent with user's logic but double check.
             id: crypto.randomBytes(32).toString("hex")
           }
         },
-        $set: {capital : user.capital - req.body.amount, totalprofit : user.totalprofit + money ,withdrawDuration: now.getTime(),investCount: user.investCount + 1},
+        $set: {
+          capital: user.capital - amount,
+          // totalprofit: user.totalprofit + money // removing immediate profit addition, profit is earned over time
+          withdrawDuration: now.getTime(),
+          investCount: user.investCount + 1
+        },
       }
-      )
-      res.json({ status: 'ok', amount: req.body.amount })
-    } else {
-      res.json({
-        message: 'Insufficient capital!',
-        status:400
-      })
-    }
+    );
+
+    res.json({ status: 'ok', amount: amount });
+
   } catch (error) {
-    return res.json({ status: 500 , error: error})
+    console.error("Investment Error:", error);
+    return res.json({ status: 500, error: 'Internal server error' });
   }
-})
+});
 
 
-const change = (users, now) => {
-  users.forEach((user) => {
-     
-    user.investment.map(async (invest) => {
-      if (isNaN(invest.started)) {
-        console.log('investment is not a number')
-        res.json({message:'investment is not a number'})
-        return
+// ==========================================
+// 3. CRON JOB (Profit Distribution)
+// ==========================================
+// Updates user balances with profit if the week has passed
+const processInvestments = async (users, now) => {
+  const updates = [];
+
+  for (const user of users) {
+    if (!user.investment || user.investment.length === 0) continue;
+
+    let userChanged = false;
+    let newFunded = user.funded || 0;
+    let newTotalProfit = user.totalprofit || 0;
+    let newCapital = user.capital || 0; // Existing logic seemed to add profit to capital too?
+
+    // Map through investments to check updates
+    // We use a regular for-loop to support async/await if needed, or just standard mapping
+    const updatedInvestments = user.investment.map(invest => {
+      // Skip invalid records
+      if (!invest.started || !invest.nextPayout) return invest;
+      if (!invest.active && invest.active !== undefined) return invest; // If we track active status
+
+      // Check if investment has ended
+      // Using endDateMs if we stored it, or calculating from duration
+      const endTime = invest.endDateMs || (invest.started + (invest.ended || 0)); // Fallback to old logic if needed
+
+      if (now >= endTime) {
+        // Investment expired
+        invest.active = false;
+        return invest;
       }
-      if (user.investment == []) {
-        console.log('investment is an empty array')
-        res.json({message:'investment is an empty array'})
-        return
+
+      // Check if it's time for a payout
+      if (now >= invest.nextPayout) {
+        const profitAmount = invest.periodicProfit || invest.profit; // Support both naming conventions
+
+        if (profitAmount && !isNaN(profitAmount)) {
+          // PAYOUT!
+          newFunded += profitAmount;
+          newTotalProfit += profitAmount;
+          newCapital += profitAmount; // Based on your old logic: capital: user.capital + invest.profit
+
+          invest.totalEarned = (invest.totalEarned || 0) + profitAmount;
+
+          // Schedule next payout (add 7 days)
+          invest.nextPayout += (7 * 24 * 60 * 60 * 1000);
+
+          // If we missed multiple weeks (server down), this loop only pays once. 
+          // To pay multiple weeks at once, you'd use a while loop here, but safer to do one at a time.
+
+          userChanged = true;
+        }
       }
-      if (now - invest.started >= invest.ended) {
-        console.log('investment completed')
-        res.json({message:'investment completed'})
-        return
-      }
-      if (isNaN(invest.profit)) {
-        console.log('investment profit is not a number')
-        res.json({message:'investment profit is not a number'})
-        return
-      }
-      else{
-      try {
-        await User.updateOne(
+      return invest;
+    });
+
+    if (userChanged) {
+      updates.push(
+        User.updateOne(
           { email: user.email },
           {
-            $set:{
-              funded:user.funded + invest.profit,
-              capital: user.capital + invest.profit,
-              totalprofit : user.totalprofit + invest.profit
+            $set: {
+              funded: newFunded,
+              totalprofit: newTotalProfit,
+              capital: newCapital,
+              investment: updatedInvestments
             }
           }
         )
-      } catch (error) {
-        console.log(error)
-      }}
- })
-})
-} 
+      );
+    }
+  }
+
+  // Execute all DB updates
+  await Promise.all(updates);
+  return updates.length;
+};
+
 app.get('/api/cron', async (req, res) => {
   try {
-      const users = (await User.find()) ?? []
-      const now = new Date().getTime()
-      change(users, now)
-      return res.json({status:200})
+    const users = await User.find();
+    const now = new Date().getTime();
+
+    const count = await processInvestments(users, now);
+
+    // Send ONE response after all processing is done
+    return res.json({ status: 200, message: `Processed updates for ${count} users.` });
+
   } catch (error) {
-    console.log(error)
-    return res.json({status:500, message:'error! timeout'})
+    console.log(error);
+    return res.json({ status: 500, message: 'Error executing cron job' });
   }
-})
+});
+
 
 app.post('/api/getWithdrawInfo', async (req, res) => {
   try {
     const user = await User.findOne({
       email: req.body.email,
     })
-    if(user){
-    const userAmount = user.withdraw[user.withdraw.length - 1].amount
-    return res.json({ status: 'ok', amount: userAmount})
+    if (user) {
+      const userAmount = user.withdraw[user.withdraw.length - 1].amount
+      return res.json({ status: 'ok', amount: userAmount })
     }
   }
-  catch(err) {
-      return res.json({ status: 'error', user: false })
-    }
+  catch (err) {
+    return res.json({ status: 'error', user: false })
+  }
 })
 
 app.post('/api/updateWallet', async (req, res) => {
-  const {address,type,network} = req.body
+  const { address, type, network } = req.body
   try {
     const wallet = await Wallet.findOne({
       type: type,
     })
-    if(wallet){
+    if (wallet) {
       await Wallet.updateOne({ type: type }, {
-      address: address, type: type, network:network
-    })
-    return res.json({ status: 'ok', message:'wallet updated'})
+        address: address, type: type, network: network
+      })
+      return res.json({ status: 'ok', message: 'wallet updated' })
     }
   }
-  catch(err) {
-      return res.json({ status: 'error', user: false })
-    }
+  catch (err) {
+    return res.json({ status: 'error', user: false })
+  }
 })
 
 app.post('/api/updateAdminPassword', async (req, res) => {
   const newPassword = req.body.newPassword
   try {
-    
+
     await Admin.updateOne({ email: 'boardbank.com@gmail.com' }, {
-        password:newPassword
-      })
-    return res.json({ status: 'ok', message:'password updated'})
-    }
-  catch(err) {
-      return res.json({ status: 'error', error: err })
-    }
+      password: newPassword
+    })
+    return res.json({ status: 'ok', message: 'password updated' })
+  }
+  catch (err) {
+    return res.json({ status: 'error', error: err })
+  }
 })
 
 app.get('/api/fetchWallets', async (req, res) => {
   try {
-      const wallets = await Wallet.find()
-      return res.json({status:200, wallets:wallets})
+    const wallets = await Wallet.find()
+    return res.json({ status: 200, wallets: wallets })
   } catch (error) {
     console.log(error)
-    return res.json({status:500, message:'sorry, no wallets found'})
+    return res.json({ status: 500, message: 'sorry, no wallets found' })
   }
 })
 
+// ==========================================
+// CONFIGURATION: Nodemailer Transporter
+// ==========================================
+// Replace with your actual SMTP credentials or service (e.g., Gmail, SendGrid, etc.)
+const transporter = nodemailer.createTransport({
+  service: 'gmail', // or 'smtp.example.com'
+  auth: {
+    user: 'boardbank.com@gmail.com', // Your email
+    pass: 'pbpzdkomeiwviset'     // Your app password (not login password)
+  }
+});
+
+// ==========================================
+// ROUTE: Send Bulk Email
+// ==========================================
+app.post('/api/admin/send-bulk-email', async (req, res) => {
+  // 1. Security: Verify Admin (Optional but recommended)
+  // const token = req.headers['x-access-token'];
+  // ... verify token logic ...
+
+  const { subject, message } = req.body;
+
+  if (!subject || !message) {
+    return res.json({ status: 400, message: 'Subject and message are required.' });
+  }
+
+  try {
+    // 2. Fetch All Users
+    const users = await User.find({}, 'email firstname lastname'); // Select only needed fields
+
+    if (!users || users.length === 0) {
+      return res.json({ status: 404, message: 'No users found to email.' });
+    }
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    // 3. Send Emails Loop
+    // We use Promise.all to send in parallel (be careful with rate limits!)
+    // Or specific batching if user base is huge. For now, simple loop.
+
+    const emailPromises = users.map(user => {
+      const mailOptions = {
+        from: '"BoardBank Support" <support@boardbanking.com>',
+        to: user.email,
+        subject: subject,
+        // Simple HTML template
+        html: `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                        <h2>Hello ${user.firstname || 'Valued User'},</h2>
+                        <p>${message.replace(/\n/g, '<br>')}</p>
+                        <hr>
+                        <p style="font-size: 12px; color: #777;">&copy; ${new Date().getFullYear()} BoardBank. All rights reserved.</p>
+                    </div>
+                `
+      };
+
+      return transporter.sendMail(mailOptions)
+        .then(() => {
+          sentCount++;
+        })
+        .catch(err => {
+          console.error(`Failed to email ${user.email}:`, err);
+          failedCount++;
+        });
+    });
+
+    await Promise.all(emailPromises);
+
+    // 4. Response
+    return res.json({
+      status: 'ok',
+      message: `Emails processed. Sent: ${sentCount}, Failed: ${failedCount}`,
+      sent: sentCount,
+      failed: failedCount
+    });
+
+  } catch (error) {
+    console.error('Bulk Email Error:', error);
+    return res.json({ status: 500, error: 'Internal server error during bulk email.' });
+  }
+});
+
+app.post('/api/admin/users/:id/toggle-status', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      return res.json({ status: 404, message: 'User not found' });
+    }
+    user.isActive = !user.isActive;
+    await user.save();
+    res.json({ status: 200, message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`, isActive: user.isActive });
+  } catch (error) {
+    console.error(error);
+    res.json({ status: 500, message: 'Error toggling user status' });
+  }
+});
+
+
+// ==========================================
+// BOT PURCHASE ROUTES
+// ==========================================
+
+// 1. User submits a bot purchase request
+app.post('/api/bot-purchase', async (req, res) => {
+  const { userId, botId, amount, walletAddress } = req.body;
+  try {
+    const newPurchase = await BotPurchase.create({
+      userId,
+      botId,
+      amount,
+      walletAddress,
+      status: 'pending'
+    });
+
+    const user = await User.findById(userId);
+
+    // Email to User
+    // Use global transporter
+    const userMailOptions = {
+      from: '"BoardBank Support" <boardbank.com@gmail.com>',
+      to: user.email,
+      subject: 'Bot Purchase Request Received',
+      html: `<h3>Hello ${user.firstname},</h3><p>We have received your payment request for <b>${botId}</b>.</p><p>Our admin team will confirm the payment manually. You will receive an email once approved.</p>`
+    };
+    transporter.sendMail(userMailOptions, (err, info) => {
+      if (err) console.log('Email error:', err);
+    });
+
+    res.json({ status: 'ok', message: 'Purchase request submitted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.json({ status: 500, message: 'Internal server error' });
+  }
+});
+
+// 2. Admin views all bot purchase requests
+app.get('/api/admin/bot-purchases', async (req, res) => {
+  try {
+    const requests = await BotPurchase.find().sort({ timestamp: -1 });
+    // Enrich with user details
+    const enrichedRequests = await Promise.all(requests.map(async (req) => {
+      const user = await User.findById(req.userId);
+      return {
+        ...req._doc,
+        username: user ? user.username : 'Unknown',
+        email: user ? user.email : 'Unknown'
+      };
+    }));
+    res.json({ status: 'ok', requests: enrichedRequests });
+  } catch (error) {
+    res.json({ status: 500, message: 'internal error' });
+  }
+});
+
+// 3. Admin approves or rejects
+app.post('/api/admin/bot-purchases/:id/decision', async (req, res) => {
+  const { id } = req.params;
+  const { decision } = req.body; // 'approved' or 'rejected'
+
+  try {
+    const purchase = await BotPurchase.findById(id);
+    if (!purchase) return res.json({ status: 404, message: 'Request not found' });
+
+    if (purchase.status !== 'pending') {
+      return res.json({ status: 400, message: 'Request already processed' });
+    }
+
+    const user = await User.findById(purchase.userId);
+
+
+    if (decision === 'approved') {
+      purchase.status = 'approved';
+      await purchase.save();
+
+      user.tradebotstatus = true;
+
+      // Deduct amount from user funds as requested
+      // We assume user has funds or we allow negative (or user logic handles it)
+      // Per request: "subtracted from the user's funded and capital"
+      user.funded = (user.funded || 0) - purchase.amount;
+      user.capital = (user.capital || 0) - purchase.amount;
+
+      await user.save();
+
+      const mailOptions = {
+        from: '"BoardBank Support" <boardbank.com@gmail.com>',
+        to: user.email,
+        subject: 'Bot Purchase Approved!',
+        html: `<h3>Congratulations ${user.firstname}!</h3><p>Your purchase of <b>${purchase.botId}</b> has been approved.</p><p>You can now access trading bot features.</p>`
+      };
+      transporter.sendMail(mailOptions);
+
+    } else if (decision === 'rejected') {
+      purchase.status = 'rejected';
+      await purchase.save();
+
+      const mailOptions = {
+        from: '"BoardBank Support" <boardbank.com@gmail.com>',
+        to: user.email,
+        subject: 'Bot Purchase Rejected',
+        html: `<h3>Hello ${user.firstname},</h3><p>We regret to inform you that your purchase request for <b>${purchase.botId}</b> was rejected.</p><p>Please contact support if you believe this is a mistake.</p>`
+      };
+      transporter.sendMail(mailOptions);
+    }
+
+    res.json({ status: 'ok', message: `Request ${decision}` });
+
+  } catch (error) {
+    console.error(error);
+    res.json({ status: 500, message: 'Internal error' });
+  }
+});
 
 module.exports = app
 
