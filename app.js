@@ -696,14 +696,9 @@ app.post('/api/invest', async (req, res) => {
 
     // CALCULATION ---------------------------
     // Use server-side config for calculations, NOT client input
-    const periodicProfit = calculateProfit(amount, planConfig.weeklyPercent);
-
-    // Calculate total expected profit over the full duration? 
-    // If the plan pays weekly for X days:
-    // Number of payouts = Duration Days / 7
-    // Total Profit = periodicProfit * (Duration Days / 7)
-    // Note: If you want exactly 52 weeks or a specific number of payouts, logic might need adjustment.
-    // For now, we store the periodic (weekly) profit amount to be paid out by the Cron job.
+    const weeklyProfit = calculateProfit(amount, planConfig.weeklyPercent);
+    const dailyProfit = parseFloat((weeklyProfit / 7).toFixed(2));
+    const threeHourlyProfit = (weeklyProfit / 7) / 8; // Keep precision for payout
 
     const now = new Date();
     const durationMs = planConfig.durationDays * 24 * 60 * 60 * 1000;
@@ -722,10 +717,10 @@ app.post('/api/invest', async (req, res) => {
             startDate: now.toLocaleString(),
             endDate: endDate.toLocaleString(),
             endDateMs: endDate.getTime(), // Store raw MS for easier comparison in Cron
-            profit: periodicProfit, // This is the WEEKLY profit amount
-            periodicProfit: periodicProfit,
+            profit: dailyProfit, // Store daily profit as requested for display
+            periodicProfit: threeHourlyProfit, // This is the 3-HOURLY profit amount for Cron
             started: now.getTime(),
-            nextPayout: now.getTime() + (7 * 24 * 60 * 60 * 1000), // First payout in 7 days
+            nextPayout: now.getTime() + (3 * 60 * 60 * 1000), // First payout in 3 hours
             totalEarned: 0,
             active: true
           },
@@ -779,7 +774,12 @@ const processInvestments = async (users, now) => {
 
       // 2. CHECK PAYOUT FIRST
       if (now >= invest.nextPayout) {
-        const profitAmount = invest.periodicProfit || invest.profit;
+        // Legacy Support: If periodicProfit is missing, calculate from old weekly profit (profit / 56)
+        // New Logic: periodicProfit is already 3-hourly.
+        let profitAmount = invest.periodicProfit;
+        if (!profitAmount && invest.profit) {
+          profitAmount = invest.profit / 56; // 7 days * 8 intervals = 56
+        }
 
         if (profitAmount && !isNaN(profitAmount)) {
           console.log(`[PAYOUT] Paying ${profitAmount} to ${user.email} for plan ${invest.plan}`);
@@ -790,8 +790,8 @@ const processInvestments = async (users, now) => {
 
           invest.totalEarned = (invest.totalEarned || 0) + profitAmount;
 
-          // Schedule next payout (add 7 days)
-          invest.nextPayout += (7 * 24 * 60 * 60 * 1000);
+          // Schedule next payout (add 3 hours)
+          invest.nextPayout += (3 * 60 * 60 * 1000);
 
           userChanged = true;
         }
@@ -960,17 +960,20 @@ app.post('/api/admin/send-bulk-email', async (req, res) => {
 
     const emailPromises = users.map(user => {
       const mailOptions = {
-        from: '"BoardBank Support" <support@boardbanking.com>',
+        from: '"BoardBank" <boardbank.com@gmail.com>',
         to: user.email,
         subject: subject,
         // Simple HTML template
         html: `
-                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-                        <h2>Hello ${user.firstname || 'Valued User'},</h2>
-                        <p>${message.replace(/\n/g, '<br>')}</p>
-                        <hr>
-                        <p style="font-size: 12px; color: #777;">&copy; ${new Date().getFullYear()} BoardBank. All rights reserved.</p>
-                    </div>
+<div style="padding: 20px;">
+<div style="padding: 10px 15px; border: 1px solid #ddd; box-shadow: 0px 3px 40px #e5e9f3;">
+<img style="width: 100%; max-width: 400px; height: auto; margin: 0px 0px; object-fit: cover;" src="http://res.cloudinary.com/duesyx3zu/image/upload/v1746008323/upload/qljqkq05ty5iymokw43h.png" alt="company_logo">
+<p style="font-family: 'poppins','lato','san-serif'; color: goldenrod;">Hello ${user.firstname || 'Valued User'},</p>
+<p style="font-family: 'poppins','lato','san-serif';">${message.replace(/\n/g, '<br>')}</p>
+<p style="font-family: 'poppins','lato','san-serif';"><span style="font-size: 10pt;">Happy Investment!,</span></p>
+<p style="font-family: 'poppins','lato','san-serif';"><span style="font-size: 10pt; color: goldenrod;">Board Bank Team</span></p>
+</div>
+</div>
                 `
       };
 
